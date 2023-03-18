@@ -106,7 +106,15 @@ let
   prepareOutput = { caches, globs, copyOutput, ... }: ''
     mkdir -p output
   '' + lib.optionalString (builtins.length caches > 0) ''
-    cp -r --preserve --no-clobber -t output/ ${toString copyOutput}
+    for file in ${toString copyOutput}; do
+       name=$(basename "$file")
+       if [[ "$name" == Prim* ]]; then
+          cp -r --no-clobber -t output "$file"
+       elif [ ! -e "output/$name" ]; then
+          ln -s -t output "$file"
+       fi
+    done
+    rm output/cache-db.json output/package.json
     chmod -R +w output
     ${jq}/bin/jq -s add ${toString caches} > output/cache-db.json
   '';
@@ -212,12 +220,11 @@ let
       buildPhase =
         let
           minification = lib.optionalString minify "--minify";
-          moduleFile = "./output/${module}/index.js";
+          moduleFile = "${build}/output/${module}/index.js";
           command = "esbuild --bundle --outfile=bundle.js --format=${format}";
         in
         if app
         then ''
-          cp -r -L ${build}/output output
           echo "import {main} from '${moduleFile}'; main()" | ${command} ${minification}
         ''
         else ''

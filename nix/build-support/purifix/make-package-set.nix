@@ -72,14 +72,6 @@ let
           mv output "$out/"
         '';
         fixupPhase = ''
-          for file in ${toString copyOutput}; do
-            name="$(basename "$file")";
-            if [ "$name" == "cache-db.json" ]; then
-              true # skip
-            else
-              rm -rf "$out/output/$name"
-            fi
-          done
           ${python3}/bin/python ${reduce-cache-db} $out/output/cache-db.json ${toString caches} > cache-db.json
           mv cache-db.json $out/output/cache-db.json
         '';
