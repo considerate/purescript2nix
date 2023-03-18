@@ -1,4 +1,4 @@
-{ jq, stdenv, lib, python3, writeText }:
+{ jq, stdenv, lib, python3, writeText, linkFiles }:
 let
   # TODO: remove python dependency due to this script
   # This script will load the cache-db.json from the output folder and remove
@@ -50,14 +50,7 @@ let
         preparePhase = ''
           mkdir -p output
         '' + lib.optionalString (builtins.length package.dependencies > 0) ''
-          for file in ${toString copyOutput}; do
-             name=$(basename "$file")
-             if [[ "$name" == Prim* ]]; then
-                cp -r --no-clobber -t output "$file"
-             elif [ ! -e "output/$name" ]; then
-                ln -s -t output "$file"
-             fi
-          done
+          echo ${toString copyOutput} | xargs ${linkFiles}
           chmod -R +w output
           rm output/cache-db.json
           rm output/package.json

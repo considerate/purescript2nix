@@ -12,7 +12,33 @@
 , findutils
 , esbuild
 , runtimeShell
+, writeShellScript
 }:
+let
+  linkFiles = writeShellScript "link-files" ''
+    copies=()
+    links=()
+    declare -A visited
+    for file in "$@"; do
+       name=$(basename "$file")
+       if [[ ''${visited[$name]} == 1 ]]; then
+         continue
+       fi
+       visited[$name]=1
+       if [[ "$name" == Prim* ]]; then
+          copies+=( "$file" )
+       elif [ ! -e "output/$name" ]; then
+          links+=( "$file" )
+       fi
+    done
+    if [[ ''${#copies[*]} > 0 ]]; then
+      cp -r --no-clobber -t output "''${copies[@]}"
+    fi
+    if [[ ''${#links[*]} > 0 ]]; then
+      ln -s -t output "''${links[@]}"
+    fi
+  '';
+in
 { localPackages
 , package-config
 , backend
@@ -67,7 +93,7 @@ let
   codegen = if backend == null then "js" else "corefn";
 
 
-  make-pkgs = lib.makeOverridable (callPackage ./make-package-set.nix { }) {
+  make-pkgs = lib.makeOverridable (callPackage ./make-package-set.nix { inherit linkFiles; }) {
     inherit storage-backend
       packages
       codegen
@@ -106,14 +132,7 @@ let
   prepareOutput = { caches, globs, copyOutput, ... }: ''
     mkdir -p output
   '' + lib.optionalString (builtins.length caches > 0) ''
-    for file in ${toString copyOutput}; do
-       name=$(basename "$file")
-       if [[ "$name" == Prim* ]]; then
-          cp -r --no-clobber -t output "$file"
-       elif [ ! -e "output/$name" ]; then
-          ln -s -t output "$file"
-       fi
-    done
+    echo ${toString copyOutput} | xargs ${linkFiles}
     rm output/cache-db.json output/package.json
     chmod -R +w output
     ${jq}/bin/jq -s add ${toString caches} > output/cache-db.json
