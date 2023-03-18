@@ -152,7 +152,8 @@ let
           purs compile ${toString old.passthru.globs} "${old.passthru.package.src}/${old.passthru.package.subdir or ""}/test/**/*.purs"
         '';
         installPhase = ''
-          node --input-type=module --abort-on-uncaught-exception --trace-sigint --trace-uncaught --eval="import {main} from './output/${testMain}/index.js'; main();" | tee $out
+          cp -r -L output test-output
+          node --input-type=module --abort-on-uncaught-exception --trace-sigint --trace-uncaught --eval="import {main} from './test-output/${testMain}/index.js'; main();" | tee $out
         '';
         fixupPhase = "#nothing to be done here";
       });
@@ -211,11 +212,12 @@ let
       buildPhase =
         let
           minification = lib.optionalString minify "--minify";
-          moduleFile = "${build}/output/${module}/index.js";
+          moduleFile = "./output/${module}/index.js";
           command = "esbuild --bundle --outfile=bundle.js --format=${format}";
         in
         if app
         then ''
+          cp -r -L ${build}/output output
           echo "import {main} from '${moduleFile}'; main()" | ${command} ${minification}
         ''
         else ''

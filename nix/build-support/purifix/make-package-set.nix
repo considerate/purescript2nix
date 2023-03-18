@@ -5,7 +5,7 @@ let
   # all keys present in the dependencies' cache-db files. This results in that
   # each package only stores the modules that are defined in that package in
   # its cache-db.json
-  reduce-chache-db = writeText "chache-db.py" ''
+  reduce-cache-db = writeText "cache-db.py" ''
     import json
     import sys
 
@@ -50,8 +50,17 @@ let
         preparePhase = ''
           mkdir -p output
         '' + lib.optionalString (builtins.length package.dependencies > 0) ''
-          echo ${toString copyOutput} | xargs cp -r --preserve --no-clobber -t output/
+          for file in ${toString copyOutput}; do
+             name=$(basename "$file")
+             if [[ "$name" == Prim* ]]; then
+                cp -r --no-clobber -t output "$file"
+             elif [ ! -e "output/$name" ]; then
+                ln -s -t output "$file"
+             fi
+          done
           chmod -R +w output
+          rm output/cache-db.json
+          rm output/package.json
           ${jq}/bin/jq -s add ${toString caches} > output/cache-db.json
         '';
         buildPhase = ''
@@ -60,7 +69,7 @@ let
         '';
         installPhase = ''
           mkdir -p "$out"
-          cp -r output "$out/"
+          mv output "$out/"
         '';
         fixupPhase = ''
           for file in ${toString copyOutput}; do
@@ -71,7 +80,7 @@ let
               rm -rf "$out/output/$name"
             fi
           done
-          ${python3}/bin/python ${reduce-chache-db} $out/output/cache-db.json ${toString caches} > cache-db.json
+          ${python3}/bin/python ${reduce-cache-db} $out/output/cache-db.json ${toString caches} > cache-db.json
           mv cache-db.json $out/output/cache-db.json
         '';
         passthru = {
