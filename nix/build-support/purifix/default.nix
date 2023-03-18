@@ -18,7 +18,6 @@
   #
   # Example: ./some/path/to/purescript-strings
   src
-, workspaceYaml ? "${src}/spago.yaml"
 , backend ? null
 , backendCommand ? lib.optionalString (backend != null) "${backend}/bin/${backend.pname}"
 , storage-backend ? package: "https://packages.registry.purescript.org/${package.pname}/${package.version}.tar.gz"
@@ -26,12 +25,11 @@
 , allowMultiWorkspaceBuild ? false
 , withDocs ? true
 , nodeModules ? null
+, localPackages ? null
 }:
 
 let
 
-  # Parse the workspace global spago.yaml
-  workspace = (fromYAML (builtins.readFile workspaceYaml)).workspace;
   # TODO: Support the purs.json file instead/as well? It doesn't seem to
   # support extra_packages but could be ok if there's a global workspace spago.yaml.
 
@@ -50,11 +48,11 @@ let
 
         Workspace originally defined in
 
-        ${before.yamlPath}
+        ${before.configPath}
 
         Redefined in
 
-        ${after.yamlPath}
+        ${after.configPath}
 
         This is disallowed because having a build of packages across multiple
         workspaces is likely to require rebuilding many packages.
@@ -67,24 +65,36 @@ let
   find-packages = workspace: dir:
     let
       contents = builtins.readDir dir;
+      has-yaml = builtins.hasAttr "spago.yaml" contents;
+      has-json = builtins.hasAttr "purifix.json" contents;
       names = builtins.attrNames contents;
       directoryNames =
         builtins.partition (name: contents.${name} == "directory") names;
       directories = map (d: dir + "/${d}") directoryNames.right;
       yamlPath = dir + "/spago.yaml";
       yaml = fromYAML (builtins.readFile yamlPath);
-      this-workspace =
+      jsonPath = dir + "/purifix.json";
+      json = builtins.fromJSON (builtins.readFile jsonPath);
+      json-workspace =
+        if builtins.hasAttr "workspace" json then {
+          configPath = jsonPath;
+          workspace = yaml.workspace;
+        } else
+          null;
+      yaml-workspace =
         if builtins.hasAttr "workspace" yaml then {
-          yamlPath = yamlPath;
+          configPath = yamlPath;
           workspace = yaml.workspace;
         } else
           null;
       next-workspace =
-        if has-config then
-          update-workspace workspace this-workspace
+        if has-json then
+          update-workspace workspace json-workspace
+        else if has-yaml then
+          update-workspace workspace yaml-workspace
         else
           workspace;
-      config = {
+      yaml-config = {
         name = yaml.package.name;
         value = {
           repo = src;
@@ -98,14 +108,20 @@ let
               next-workspace.workspace;
         };
       };
-      has-config = builtins.hasAttr "spago.yaml" contents;
-      packages = lib.optionals (has-config && builtins.hasAttr "package" yaml)
-        [ config ];
+      packages =
+        if has-json && builtins.hasAttr "package" json then
+          [ json-config ]
+        else if has-yaml && builtins.hasAttr "package" yaml then
+          [ yaml-config ]
+        else [ ];
     in
     packages
     ++ builtins.concatLists (map (find-packages next-workspace) directories);
 
-  localPackages = builtins.listToAttrs (find-packages null src);
+  localPackages_ =
+    if localPackages == null then
+      builtins.listToAttrs (find-packages null src)
+    else localPackages;
 
   build-package = callPackage ./build-purifix-package.nix {
     inherit fromYAML purescript-registry purescript-registry-index purescript-language-server;
@@ -113,14 +129,15 @@ let
   package-names = builtins.attrNames localPackages;
   build = name: package-config:
     build-package {
-      inherit localPackages package-config;
+      localPackages = localPackages_;
+      inherit package-config;
       inherit backend backendCommand storage-backend develop-packages withDocs nodeModules;
     };
 in
 if builtins.length package-names == 1 then
   let
     name = builtins.elemAt package-names 0;
-    pkg = localPackages.${name};
+    pkg = localPackages_.${name};
   in
   build name pkg
 else
