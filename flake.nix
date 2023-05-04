@@ -156,7 +156,12 @@
         {
           default = pkgs.mkShell {
             name = "purifix-shell";
-            buildInputs = [ easy-ps.purs-0_15_7 pkgs.yaml2json pkgs.jq ];
+            buildInputs = [
+              easy-ps.purs-0_15_7
+              pkgs.yaml2json
+              pkgs.jq
+              easy-ps.purescript-language-server
+            ];
           };
           # This purescript development shell just contains dhall, purescript,
           # and spago.  This is convenient for making changes to
@@ -166,7 +171,10 @@
           }).example-purescript-package.develop;
           spago = pkgs.mkShell {
             name = "spago-shell";
-            buildInputs = [ easy-ps.spago easy-ps.purs-0_15_7 ];
+            buildInputs = [
+              easy-ps.spago
+              easy-ps.purs-0_15_7
+            ];
           };
         });
 
